@@ -17,8 +17,8 @@ def run_module():
                          name = dict(type='str', alias='templateName'),
                          description = dict(type='str', alias='templateDescription'),
                          templates = dict(type='str', alias='generalTemplates'),
-                         device_type = dict(type='list', alias='deviceType'),
-                         config_type=dict(type='list', alias='configType'),
+                         device_type = dict(type='str', alias='deviceType'),
+                         config_type=dict(type='str', alias='configType'),
                          factory_default=dict(type='bool', alias='factoryDefault'),
                          aggregate=dict(type='list'),
     )
@@ -54,6 +54,7 @@ def run_module():
                     'configType': viptela.params['config_type'],
                     'factoryDefault': viptela.params['factory_default'],
                     'generalTemplates': viptela.params['templates'],
+                    'state': 'present',
                 }
             ]
         else:
@@ -69,6 +70,7 @@ def run_module():
     compare_values = ['templateDescription', 'deviceType', 'configType', 'generalTemplates']
     ignore_values = ["lastUpdatedOn", "lastUpdatedBy", "templateId", "createdOn", "createdBy"]
 
+    print("~~~~~~~~~~~~")
     for device_template in device_template_list:
         if viptela.params['state'] == 'present':
             payload = {
@@ -101,9 +103,19 @@ def run_module():
                     #
                     # Convert template names to template IDs
                     #
-                    if payload['configType'] == 'template':
+                    if device_template['configType'] == 'template':
                         payload['generalTemplates'] = viptela.generalTemplates_to_id(device_template['generalTemplates'])
-                    viptela.request('/dataservice/template/device/feature', method='POST', payload=payload)
+
+                    if device_template['configType'] == "cli":
+                        # If the template is a cli template, the parameter in which to send the template is called "templateConfiguration"
+                        payload['templateConfiguration'] = device_template['generalTemplates']
+                        payload['configType'] = 'file'
+                        payload['cliType'] = 'device'
+                    
+                    if device_template['configType'] == "cli":
+                        viptela.request('/dataservice/template/device/cli', method='POST', payload=payload)
+                    else:
+                        viptela.request('/dataservice/template/device/feature', method='POST', payload=payload)
                 viptela.result['changed'] = True
         else:
             if device_template['templateName'] in device_template_dict:
