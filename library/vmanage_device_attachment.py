@@ -60,22 +60,22 @@ def run_module():
             viptela.fail_json(msg='Cannot find device with UUID: {0}.'.format(viptela.params['uuid']))
         # If this is a preallocation, we need to set these things.
         if 'system-ip' not in device_data or len(device_data['system-ip']) == 0:
-            if viptela.params['system_ip']:
-                device_data['system-ip'] = viptela.params['system_ip']
+            if 'device_ip' in viptela.params:
+                device_data['system-ip'] = viptela.params['device_ip']
             else:
-                viptela.fail_json(msg='system_ip is needed when pre-attaching templates')
+                viptela.fail_json(msg='device_ip is needed when pre-attaching templates')
         if 'deviceIP' not in device_data or len(device_data['deviceIP']) == 0:
-            if viptela.params['system_ip']:
-                device_data['deviceIP'] = viptela.params['system_ip']
+            if 'device_ip' in viptela.params:
+                device_data['deviceIP'] = viptela.params['device_ip']
             else:
-                viptela.fail_json(msg='system_ip is needed when pre-attaching templates')
+                viptela.fail_json(msg='device_ip is needed when pre-attaching templates')
         if 'site-id' not in device_data or len(device_data['site-id']) == 0:
-            if viptela.params['site_id']:
+            if 'site_id' in viptela.params:
                 device_data['site-id'] = viptela.params['site_id']
             else:
                 viptela.fail_json(msg='site_id is needed when pre-attaching templates')
         if 'host-name' not in device_data or len(device_data['host-name']) == 0:
-            if viptela.params['device_name']:
+            if 'device_name' in viptela.params:
                 device_data['host-name'] = viptela.params['device_name']
             else:
                 viptela.fail_json(msg='device_name is needed when pre-attaching templates')
@@ -102,6 +102,9 @@ def run_module():
         else:
             viptela.fail_json(msg='Must specify a template with state present')
 
+        # Check if the template is a cli-template
+        template_iscli = "configType" in template_data and template_data["configType"] == "file"
+
         # Make sure they passed in the required variables
         # get_template_variables provides a variable name -> property mapping
         template_variables = viptela.get_template_variables(device_template_dict[viptela.params['template']]['templateId'])
@@ -116,15 +119,24 @@ def run_module():
         viptela.result['template_variables'] = template_variables
 
         # Construct the variable payload
-        device_template_variables = {
-                "csv-status": "complete",
-                "csv-deviceId": device_data['uuid'],
-                "csv-deviceIP": device_data['deviceIP'],
-                "csv-host-name": device_data['host-name'],
-                '//system/host-name': device_data['host-name'],
-                '//system/system-ip': device_data['system-ip'],
-                '//system/site-id': device_data['site-id'],
-            }
+        if template_iscli:
+            #CLI-templates don't have the //system/*-Variables by default
+            device_template_variables = {
+                    "csv-status": "complete",
+                    "csv-deviceId": device_data['uuid'],
+                    "csv-deviceIP": device_data['deviceIP'],
+                    "csv-host-name": device_data['host-name'],
+                }
+        else:
+            device_template_variables = {
+                    "csv-status": "complete",
+                    "csv-deviceId": device_data['uuid'],
+                    "csv-deviceIP": device_data['deviceIP'],
+                    "csv-host-name": device_data['host-name'],
+                    '//system/host-name': device_data['host-name'],
+                    '//system/system-ip': device_data['system-ip'],
+                    '//system/site-id': device_data['site-id'],
+                }
 
         # For each of the variables passed in, match them up with the names of the variables requires in the
         # templates and add them with the corresponding property.  The the variables is not in template_variables,
@@ -132,7 +144,7 @@ def run_module():
         for key, value in viptela.params['variables'].items():
             if key in template_variables:
                 property = template_variables[key]
-                device_template_variables[property] = viptela.params['variables'][key]
+                device_template_variables[property] = value
 
         # When dealing with optional parameters if we do not have explicitely set a value for it
         # we must add the optional parameter to the payload with { key: 'TEMPLATE_IGNORE'}
@@ -154,6 +166,7 @@ def run_module():
                 "isEdited": "true",
                 "isMasterEdited": "false"
             }
+            
             response = viptela.request('/dataservice/template/device/config/input/', method='POST', payload=payload)
             if response.json and 'data' in response.json:
                 current_variables = response.json['data'][0]
@@ -179,7 +192,11 @@ def run_module():
                     }
                 ]
             }
-            response = viptela.request('/dataservice/template/device/config/attachfeature', method='POST', payload=payload)
+
+            if template_iscli:
+                response = viptela.request('/dataservice/template/device/config/attachcli', method='POST', payload=payload)
+            else:
+                response = viptela.request('/dataservice/template/device/config/attachfeature', method='POST', payload=payload)
             if response.json:
                 action_id = response.json['id']
             else:

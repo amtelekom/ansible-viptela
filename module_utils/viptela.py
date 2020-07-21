@@ -175,7 +175,7 @@ class viptelaModule(object):
 
         try:
             response.json = response.json()
-        except JSONDecodeError:
+        except:
             response.json = {}
 
         return response
@@ -646,12 +646,18 @@ class viptelaModule(object):
 
                 for column in column_list:
                     if column['editable']:
-                        #match = regex.search(column['title'])
-                        match = regex.findall(column['title'])
-                        if match:
-                            #variable = match.groups('variable')[0]
-                            variable = match[-1]
-                            return_dict[variable] = column['property']
+                        if 'templateType' in column:
+                            #feature-template parameter
+
+                            #match = regex.search(column['title'])
+                            match = regex.findall(column['title'])
+                            if match:
+                                #variable = match.groups('variable')[0]
+                                variable = match[-1]
+                                return_dict[variable] = column['property']
+                        else:
+                            # cli template parameters don't have the parenthesis-syntax in title
+                            return_dict[column['title']] = column['property']                   
 
         return return_dict
 
@@ -836,7 +842,7 @@ class viptelaModule(object):
 
                     # Until here
 
-                    if column['editable'] and column['optional']:
+                    if column['editable'] and 'optional' in column and column['optional']:
                         match = regex.findall(column['title'])
                         if match:
                             variable = match[-1]
